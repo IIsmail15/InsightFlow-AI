@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "currency": "GBP",
+  "date_convention": "Calendar months in UTC; period start inclusive and period end exclusive. Rates are fractions, not percentages.",
+  "metrics": [
+    {
+      "name": "revenue",
+      "description": "Gross cash collected from completed order and subscription payments; refunds reported separately. Not accounting revenue recognition.",
+      "formula": "SUM(payments.amount) WHERE payment_status = 'completed'",
+      "source_tables": ["payments", "orders", "customers", "regions"],
+      "dimensions": ["month", "region", "segment", "acquisition_channel", "payment_type"],
+      "allowed_filters": ["payment_date", "region_id", "segment", "acquisition_channel", "payment_type"],
+      "view": "analytics.monthly_revenue",
+      "value_column": "revenue",
+      "unit": "GBP",
+      "time_basis": "payment_date",
+      "empty_period": "0",
+      "notes": "Use orders.region_id for order payments and customers.region_id for subscriptions. Product revenue needs explicit line allocation; never sum whole payments after joining order_items."
+    },
+    {
+      "name": "monthly_recurring_revenue",
+      "description": "Contracted monthly subscription value active on the last calendar day of the month; independent of payment success.",
+      "formula": "SUM(monthly_value) WHERE start_date < next_month AND (end_date IS NULL OR end_date >= next_month)",
+      "source_tables": ["subscriptions", "customers"],
+      "dimensions": ["month", "plan", "region", "segment"],
+      "allowed_filters": ["month_start", "plan", "region_id", "segment"],
+      "view": "analytics.monthly_mrr",
+      "value_column": "mrr",
+      "unit": "GBP/month",
+      "time_basis": "Month-end snapshot; subscription end_date is first inactive day",
+      "empty_period": "0"
+    },
+    {
+      "name": "average_order_value",
+      "description": "Mean completed one-off order value, before refunds. Subscription payments excluded.",
+      "formula": "SUM(orders.total_amount) / COUNT(orders.order_id) WHERE status = 'completed'",
+      "source_tables": ["orders", "customers"],
+      "dimensions": ["month", "region", "segment", "acquisition_channel"],
+      "allowed_filters": ["order_date", "region_id", "segment", "acquisition_channel"],
+      "view": "analytics.monthly_average_order_value",
+      "value_column": "average_order_value",
+      "unit": "GBP/order",
+      "time_basis": "order_date",
+      "empty_period": "null when completed order count is zero"
+    },
+    {
+      "name": "refund_rate",
+      "description": "Refund amount issued in the month divided by gross completed payments collected in the same month, including subscription payments.",
+      "formula": "SUM(refunds.amount by refund_date) / SUM(completed payments.amount by payment_date)",
+      "source_tables": ["refunds", "payments", "orders", "customers"],
+      "dimensions": ["month", "region", "segment"],
+      "allowed_filters": ["month_start", "region_id", "segment"],
+      "view": "analytics.monthly_refund_rate",
+      "value_column": "refund_rate",
+      "unit": "fraction",
+      "time_basis": "Independent cash-flow dates for numerator and denominator",
+      "empty_period": "null when completed payment value is zero",
+      "notes": "Not a purchase-cohort refund rate. Refunds may relate to earlier months; rate can exceed 1. Aggregate numerator and denominator separately with identical dimension filters."
+    },
+    {
+      "name": "customer_churn",
+      "description": "Share of the opening subscriber cohort whose subscription ends during the month.",
+      "formula": "COUNT(opening cohort with month_start <= end_date < next_month) / COUNT(start_date < month_start AND (end_date IS NULL OR end_date >= month_start))",
+      "source_tables": ["subscriptions", "customers"],
+      "dimensions": ["month", "plan", "region", "segment"],
+      "allowed_filters": ["month_start", "plan", "region_id", "segment"],
+      "view": "analytics.monthly_customer_churn",
+      "value_column": "churn_rate",
+      "unit": "fraction",
+      "time_basis": "Active immediately before month start; first-day cancellations count. Same-month entrants excluded.",
+      "empty_period": "null when opening cohort is empty",
+      "notes": "One subscription lifecycle per customer makes subscriber and customer counts equivalent. This is subscription churn; churned customers may still place one-off orders. Do not use customers.status for historical cohorts."
+    }
+  ]
+}
